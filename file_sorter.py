@@ -7,6 +7,21 @@ from datetime import datetime
 from typing import Union
 
 
+def log_dir_creation(dir: Union[Path, str], created: bool, log_path: str):
+    if not created:
+        return
+
+    if not os.path.exists(log_path):
+        log_data = []
+    else:
+        with open(log_path, "r") as file:
+            log_data = json.load(file)
+
+    log_data.append({"created": str(dir)})
+
+    with open(log_path, "w") as file:
+        json.dump(log_data, file, indent=4)
+
 def log_movement(original: Union[Path, str], new: Union[Path, str], log_path: str):
     if not os.path.exists(log_path):
         log_data = []
@@ -22,6 +37,8 @@ def log_movement(original: Union[Path, str], new: Union[Path, str], log_path: st
 
 def move_file(file: Path, target_dir: Path, simulate: bool, log_path: str):
     if not simulate:
+        created = not os.path.exists(target_dir)
+        log_dir_creation(target_dir, created, log_path)
         target_dir.mkdir(exist_ok=True)
         shutil.move(str(file), str(target_dir / file.name))
         log_movement(file, target_dir / file.name, log_path)
@@ -39,6 +56,8 @@ def undo_last_organization(log_path: str):
         log_data = json.load(file)
 
     for entry in reversed(log_data):
+        if "original" not in entry or "new" not in entry:
+            continue
         original = Path(entry["original"])
         new = Path(entry["new"])
         if new.exists():
@@ -46,6 +65,16 @@ def undo_last_organization(log_path: str):
             print(f"Moved {new.name} back to {original}")
         else:
             print(f"File {new.name} not found. Skipping.")
+
+    for entry in reversed(log_data):
+        if "created" not in entry:
+            continue
+        created = Path(entry["created"])
+        if created.exists():
+            shutil.rmtree(str(created))
+            print(f"Delete dir {created}")
+        else:
+            print(f"File {created} not found. Skipping.")
 
     os.remove(log_path)
     print("Undo completed.")
@@ -57,10 +86,7 @@ def organize_by_type(path: str, simulate: bool, log_file: str):
         if file.is_file():
             file_type = file.suffix.lower().strip('.')
             target_dir = Path(path) / file_type
-            if not simulate:
-                target_dir.mkdir(exist_ok=True)
-                shutil.move(str(file), str(target_dir / file.name))
-                move_file(file, target_dir, simulate, log_file)
+            move_file(file, target_dir, simulate, log_file)
 
 
 def organize_by_date(path: str, simulate: bool, log_file: str):

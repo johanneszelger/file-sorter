@@ -1,59 +1,116 @@
+import os
+import shutil
 import unittest
 from unittest.mock import patch, mock_open, MagicMock
-from file_sorter import log_movement, move_file, undo_last_organization
+from file_sorter import log_movement, move_file, undo_last_organization, organize_by_type, organize_by_size, \
+    organize_by_date
 from pathlib import Path
 
 
 class TestFileOrganizer(unittest.TestCase):
 
     def setUp(self):
-        self.test_log_path = "test_log.json"
-        self.test_file = Path("test.txt")
-        self.test_dir = Path("test_dir")
-        self.test_target = self.test_dir / self.test_file.name
+        self.test_file = "test.txt"
+        self.test_dir = "test_dir"
+        shutil.rmtree(self.test_dir, ignore_errors=True)
+        os.makedirs(self.test_dir, exist_ok=True)
+        self.test_target = os.path.join(self.test_dir, self.test_file)
+        self.log_file = "testlog.json"
 
-    @patch("builtins.open", new_callable=mock_open, read_data='[]')
-    @patch("os.path.exists", return_value=False)
-    @patch("json.dump")
-    def test_log_movement_new_log(self, mock_json_dump, mock_exists, mock_file):
-        log_movement(self.test_file, self.test_target, self.test_log_path)
-        mock_exists.assert_called_with(self.test_log_path)
-        mock_file.assert_called_with(self.test_log_path, "w")
-        mock_json_dump.assert_called()
+        with open(os.path.join(self.test_dir, "binary.exe"), "w") as f:
+            f.write("a" * int(1e5))
+        os.utime(os.path.join(self.test_dir, "binary.exe"), (0, 0))
 
-    @patch("os.path.exists", return_value=True)
-    @patch("shutil.move")
-    @patch("os.remove")
-    @patch("pathlib.Path.exists", MagicMock(return_value=True))
-    def test_undo_last_organization(self, mock_os_path_exists, mock_shutil_move, os_remove):
-        log_data = '[{"original": "test.txt", "new": "test_dir/test.txt"}]'
-        with patch("builtins.open", new_callable=mock_open, read_data=log_data):
-            undo_last_organization(self.test_log_path)
-            mock_shutil_move.assert_called_with("test_dir\\test.txt", "test.txt")
-            os_remove.assert_called_with(self.test_log_path)
+        with open(os.path.join(self.test_dir, "image.jpg"), "w") as f:
+            f.write("a" * int(1e6))
+        os.utime(os.path.join(self.test_dir, "image.jpg"), (2 * 3600 * 24, 3600 * 24))
 
-    @patch("builtins.open", new_callable=mock_open, read_data='[{"original": "old_path", "new": "new_path"}]')
-    @patch("os.path.exists", return_value=True)
-    @patch("json.dump")
-    def test_log_movement_existing_log(self, mock_json_dump, mock_exists, mock_file):
-        log_movement(self.test_file, self.test_target, self.test_log_path)
-        mock_exists.assert_called_with(self.test_log_path)
-        mock_file.assert_called_with(self.test_log_path, "w")
-        mock_json_dump.assert_called()
+        with open(os.path.join(self.test_dir, "video.mp4"), "w") as f:
+            f.write("a" * int(1e7))
+        os.utime(os.path.join(self.test_dir, "video.mp4"), (2 * 3600 * 24, 2 * 3600 * 24))
 
-    @patch("pathlib.Path.mkdir")
-    @patch("shutil.move")
-    def test_move_file(self, mock_shutil_move, mock_mkdir):
-        move_file(self.test_file, self.test_dir, False, self.test_log_path)
-        mock_mkdir.assert_called_with(exist_ok=True)
-        mock_shutil_move.assert_called_with(str(self.test_file), str(self.test_target))
+    def tearDown(self):
+        shutil.rmtree(self.test_dir, ignore_errors=True)
+        if os.path.exists(self.log_file):
+            os.remove(self.log_file)
 
-    @patch("pathlib.Path.mkdir")
-    @patch("shutil.move")
-    def test_move_file_simulate(self, mock_shutil_move, mock_mkdir):
-        move_file(self.test_file, self.test_dir, True, self.test_log_path)
-        assert not  mock_mkdir.assert_not_called()
-        assert not mock_shutil_move.assert_not_called()
+    def test_undo_last_organization(self):
+        organize_by_type(self.test_dir, False, self.log_file)
+        undo_last_organization(self.log_file)
+
+        assert not os.path.exists(os.path.join(self.test_dir, "exe", "binary.exe"))
+        assert not os.path.exists(os.path.join(self.test_dir, "jpg", "image.jpg"))
+        assert not os.path.exists(os.path.join(self.test_dir, "mp4", "video.mp4"))
+
+        assert os.path.exists(os.path.join(self.test_dir, "binary.exe"))
+        assert os.path.exists(os.path.join(self.test_dir, "image.jpg"))
+        assert os.path.exists(os.path.join(self.test_dir, "video.mp4"))
+
+    def test_sort_by_type(self):
+        organize_by_type(self.test_dir, False, self.log_file)
+
+        assert os.path.exists(os.path.join(self.test_dir, "exe", "binary.exe"))
+        assert os.path.exists(os.path.join(self.test_dir, "jpg", "image.jpg"))
+        assert os.path.exists(os.path.join(self.test_dir, "mp4", "video.mp4"))
+
+        assert not os.path.exists(os.path.join(self.test_dir, "binary.exe"))
+        assert not os.path.exists(os.path.join(self.test_dir, "image.jpg"))
+        assert not os.path.exists(os.path.join(self.test_dir, "video.mp4"))
+
+    def test_sort_by_type_sim(self):
+        organize_by_type(self.test_dir, True, self.log_file)
+
+        assert not os.path.exists(os.path.join(self.test_dir, "exe", "binary.exe"))
+        assert not os.path.exists(os.path.join(self.test_dir, "jpg", "image.jpg"))
+        assert not os.path.exists(os.path.join(self.test_dir, "mp4", "video.mp4"))
+
+        assert os.path.exists(os.path.join(self.test_dir, "binary.exe"))
+        assert os.path.exists(os.path.join(self.test_dir, "image.jpg"))
+        assert os.path.exists(os.path.join(self.test_dir, "video.mp4"))
+
+    def test_sort_by_size(self):
+        organize_by_size(self.test_dir, False, self.log_file, int(1e6), int(1e7), int(1e8))
+
+        assert os.path.exists(os.path.join(self.test_dir, "small", "binary.exe"))
+        assert os.path.exists(os.path.join(self.test_dir, "medium", "image.jpg"))
+        assert os.path.exists(os.path.join(self.test_dir, "large", "video.mp4"))
+
+        assert not os.path.exists(os.path.join(self.test_dir, "binary.exe"))
+        assert not os.path.exists(os.path.join(self.test_dir, "image.jpg"))
+        assert not os.path.exists(os.path.join(self.test_dir, "video.mp4"))
+
+    def test_sort_by_size_sim(self):
+        organize_by_size(self.test_dir, True, self.log_file, int(1e6), int(1e7), int(1e8))
+
+        assert not os.path.exists(os.path.join(self.test_dir, "small", "binary.exe"))
+        assert not os.path.exists(os.path.join(self.test_dir, "medium", "image.jpg"))
+        assert not os.path.exists(os.path.join(self.test_dir, "large", "video.mp4"))
+
+        assert os.path.exists(os.path.join(self.test_dir, "binary.exe"))
+        assert os.path.exists(os.path.join(self.test_dir, "image.jpg"))
+        assert os.path.exists(os.path.join(self.test_dir, "video.mp4"))
+
+    def test_sort_by_date(self):
+        organize_by_date(self.test_dir, False, self.log_file)
+
+        assert os.path.exists(os.path.join(self.test_dir, "1970-01-01", "binary.exe"))
+        assert os.path.exists(os.path.join(self.test_dir, "1970-01-02", "image.jpg"))
+        assert os.path.exists(os.path.join(self.test_dir, "1970-01-03", "video.mp4"))
+
+        assert not os.path.exists(os.path.join(self.test_dir, "binary.exe"))
+        assert not os.path.exists(os.path.join(self.test_dir, "image.jpg"))
+        assert not os.path.exists(os.path.join(self.test_dir, "video.mp4"))
+
+    def test_sort_by_date_sim(self):
+        organize_by_date(self.test_dir, True, self.log_file)
+
+        assert not os.path.exists(os.path.join(self.test_dir, "1970-01-01", "binary.exe"))
+        assert not os.path.exists(os.path.join(self.test_dir, "1970-01-02", "image.jpg"))
+        assert not os.path.exists(os.path.join(self.test_dir, "1970-01-03", "video.mp4"))
+
+        assert os.path.exists(os.path.join(self.test_dir, "binary.exe"))
+        assert os.path.exists(os.path.join(self.test_dir, "image.jpg"))
+        assert os.path.exists(os.path.join(self.test_dir, "video.mp4"))
 
 
 if __name__ == '__main__':
