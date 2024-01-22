@@ -1,3 +1,4 @@
+import os
 import unittest
 from unittest.mock import patch, mock_open, MagicMock
 from file_sorter import log_movement, move_file, undo_last_organization
@@ -29,7 +30,7 @@ class TestFileOrganizer(unittest.TestCase):
         log_data = '[{"original": "test.txt", "new": "test_dir/test.txt"}]'
         with patch("builtins.open", new_callable=mock_open, read_data=log_data):
             undo_last_organization(self.test_log_path)
-            mock_shutil_move.assert_called_with("test_dir\\test.txt", "test.txt")
+            mock_shutil_move.assert_called_with(os.path.join("test_dir", "test.txt"), "test.txt")
             os_remove.assert_called_with(self.test_log_path)
 
     @patch("builtins.open", new_callable=mock_open, read_data='[{"original": "old_path", "new": "new_path"}]')
