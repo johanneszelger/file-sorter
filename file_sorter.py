@@ -105,11 +105,11 @@ def organize_by_size(path: str, simulate: bool, log_file: str, small: int, mediu
         if file.is_file():
             size = file.stat().st_size
             if size < small:  # less than 1MB
-                size_folder = 'Small'
+                size_folder = 'small'
             elif size < medium:  # less than 10MB
-                size_folder = 'Medium'
+                size_folder = 'medium'
             elif size < large:
-                size_folder = 'Large'
+                size_folder = 'large'
             else:
                 print(f"File {file} too large. Skipping.")
             target_dir = Path(path) / size_folder
